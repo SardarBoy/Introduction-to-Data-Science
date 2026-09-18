@@ -55,3 +55,92 @@ This project simulates core data science and analytical workflows at Commonwealt
 * **Data Analysis & Modeling:** Microsoft Excel (Pivot Tables, Multi-criteria Filtering, Aggregation), Python (Pandas)
 * **Data Governance & Privacy:** PII Identification, Data Masking, Field Deletion, Categorical Binning
 * **Analytics Strategy:** Social Media Sentiment Analysis, NLP Data Mapping, X (Twitter) v2 API Pipeline Mapping, Executive Proposal Writing
+
+
+
+
+
+
+# Database Design Proposal for Commonwealth Bank Social Media Intelligence
+
+## 1. Overview & Proposed Table Structure
+
+To store CommBank tweets, customer replies, quote retweets, and direct mentions at scale, the database architecture is divided into four normalized tables:
+
+1. **`Users`**: Stores profile information for authors (CommBank official accounts and individual users).
+2. **`Tweets`**: Stores core content, timestamps, and thread relationships for posts, replies, quotes, and mentions.
+3. **`Tweet_Metrics`**: Stores dynamic, time-series engagement performance data (likes, reposts, views).
+4. **`Sentiment_Analysis`**: Stores enriched NLP classifications, customer intent, and support triage flags.
+
+---
+
+## 2. Table Schemas & Variable Definitions
+
+### Table 1: `Users`
+Stores account metadata to avoid duplicating user details across multiple posts.
+
+| Variable Name | Data Type | Key Type | Description |
+| :--- | :--- | :--- | :--- |
+| `user_id` | VARCHAR(50) | **Primary Key** | Unique identifier for the social media account (from API `author_id`) |
+| `username` | VARCHAR(50) | None | Account handle (e.g., @CommBank or customer handle) |
+| `author_type` | VARCHAR(20) | None | Account category (`CommBank`, `Customer`) |
+| `follower_bucket`| VARCHAR(20) | None | Audience size bracket (e.g., `0-500`, `50k+`) |
+
+---
+
+### Table 2: `Tweets`
+Stores post content, metadata, and structural interaction relationships.
+
+| Variable Name | Data Type | Key Type | Description |
+| :--- | :--- | :--- | :--- |
+| `tweet_id` | VARCHAR(50) | **Primary Key** | Unique identifier for the tweet |
+| `author_id` | VARCHAR(50) | **Foreign Key** | Links to `Users.user_id` (identifies the post author) |
+| `post_datetime` | DATETIME | None | Exact timestamp when published (`created_at`) |
+| `post_type` | VARCHAR(20) | None | Category: `Original post`, `Reply`, `Mention`, `Quote post` |
+| `post_text` | TEXT | None | Raw text content of the tweet |
+| `topic` | VARCHAR(50) | None | Curated topic category (e.g., `Digital banking`, `Fraud & scams`) |
+| `content_format` | VARCHAR(30) | None | Media format (`Text`, `Text + image`, `Text + video`, `Link`) |
+| `in_reply_to_tweet_id` | VARCHAR(50) | **Foreign Key** | Self-referencing FK linking to `Tweets.tweet_id` if this is a reply |
+| `quoted_tweet_id` | VARCHAR(50) | **Foreign Key** | Self-referencing FK linking to `Tweets.tweet_id` if this is a quote tweet |
+
+---
+
+### Table 3: `Tweet_Metrics`
+Stores quantitative engagement data for tracking interaction performance.
+
+| Variable Name | Data Type | Key Type | Description |
+| :--- | :--- | :--- | :--- |
+| `metric_id` | INT | **Primary Key** | Unique auto-increment identifier for the metric entry |
+| `tweet_id` | VARCHAR(50) | **Foreign Key** | Links to `Tweets.tweet_id` |
+| `likes` | INT | None | Total count of likes |
+| `replies` | INT | None | Total count of direct reply comments |
+| `reposts` | INT | None | Total count of reposts / retweets |
+| `quote_posts` | INT | None | Total count of quote posts |
+| `views` | INT | None | Impression/view count |
+| `total_engagements`| INT | None | Computed sum of all user interactions |
+| `engagement_rate` | DECIMAL(5,4) | None | Engagement rate formula (`total_engagements / views`) |
+
+---
+
+### Table 4: `Sentiment_Analysis`
+Stores machine learning and operational triage flags generated from text processing.
+
+| Variable Name | Data Type | Key Type | Description |
+| :--- | :--- | :--- | :--- |
+| `analysis_id` | INT | **Primary Key** | Unique auto-increment identifier for the analysis record |
+| `tweet_id` | VARCHAR(50) | **Foreign Key** | Links to `Tweets.tweet_id` |
+| `sentiment_label` | VARCHAR(15) | None | NLP classification (`Positive`, `Negative`, `Neutral`, `Mixed`) |
+| `sentiment_score` | DECIMAL(3,2) | None | Numerical score ranging from -1.00 to +1.00 |
+| `customer_intent` | VARCHAR(50) | None | Operational category (e.g., `Scam report`, `Praise`, `App complaint`) |
+| `response_needed` | VARCHAR(3) | None | Support escalation flag (`Yes` / `No`) |
+
+---
+
+## 3. Database Table Relationships
+
+* **`Users` to `Tweets` (One-to-Many):** One user can publish multiple tweets. `Users.user_id` links to `Tweets.author_id`.
+* **`Tweets` to `Tweet_Metrics` (One-to-One):** Each tweet has one performance metric entry. `Tweets.tweet_id` links to `Tweet_Metrics.tweet_id`.
+* **`Tweets` to `Sentiment_Analysis` (One-to-One):** Each tweet has one sentiment evaluation entry. `Tweets.tweet_id` links to `Sentiment_Analysis.tweet_id`.
+* **`Tweets` to `Tweets` (Self-Referencing / Recursive Relationships):**
+  * **Replies:** `Tweets.in_reply_to_tweet_id` references `Tweets.tweet_id` of the parent post to track discussion threads.
+  * **Quote Retweets:** `Tweets.quoted_tweet_id` references `Tweets.tweet_id` of the original post being quoted.
